@@ -1,0 +1,49 @@
+FROM mellanox/mofed4-1-1
+ENV USER root
+ENV wdir /opt
+ENV HPCX_image hpcx-v1.9.7-gcc-MLNX_OFED_LINUX-4.1-1.0.2.0-ubuntu16.04-x86_64.tbz
+
+
+#RUN useradd -ms /bin/bash $USER
+RUN apt-get update && apt-get install -y \
+  wget \
+  tar \
+  bzip2 \
+  sudo \
+  environment-modules \
+  libhwloc-dev \
+  hwloc \
+  libhwloc-common \
+  libhwloc-plugins \
+  iputils-ping \
+  openssh-server
+
+
+RUN echo 'ALL     ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+
+RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+EXPOSE 22
+WORKDIR /
+
+RUN  apt-get clean && \
+  rm -rf /var/lib/apt/lists/*
+
+RUN chown $USER $wdir 
+#USER ${USER}
+WORKDIR ${wdir}
+
+# download the HPCX from official Mellanox site and unpack it in /opt
+CMD echo "start download HPCX from Mellanox "
+RUN wget http://www.mellanox.com/downloads/hpc/hpc-x/v1.9/${HPCX_image}
+RUN tar xjf ${HPCX_image} && rm -f 
+RUN rm -f ${HPCX_image}
+
+# Fix ssh for passwordless connection between containers.
+
+RUN ssh-keygen -t rsa -N "" -f /${USER}/.ssh/id_rsa 
+RUN cat /${USER}/.ssh/id_rsa.pub >> /${USER}/.ssh/authorized_keys && chmod 600 /${USER}/.ssh/authorized_keys
+RUN ssh-keyscan -H localhost >> /${USER}/.ssh/known_hosts
+RUN echo "Host *\n\tStrictHostKeyChecking no" >> /${USER}/.ssh/config && chmod 600 /${USER}/.ssh/config
+RUN echo "source ${wdir}/hpcx-v1.9.7-gcc-MLNX_OFED_LINUX-4.1-1.0.2.0-ubuntu16.04-x86_64/hpcx-init.sh" >>  /${USER}/.bashrc
+
+ENTRYPOINT sudo service ssh start  &&  bash
